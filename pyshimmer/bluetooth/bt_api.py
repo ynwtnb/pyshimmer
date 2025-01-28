@@ -343,7 +343,10 @@ class ShimmerBluetooth:
     def _run_readloop(self):
         try:
             while True:
-                self._bluetooth.process_single_input_event()
+                try:
+                    self._bluetooth.process_single_input_event()
+                except Empty:
+                    pass
 
         except ReadAbort:
             print('Read loop exciting after cancel request')
