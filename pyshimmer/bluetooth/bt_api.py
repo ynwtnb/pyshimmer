@@ -51,8 +51,8 @@ class RequestCompletion:
     def has_completed(self) -> bool:
         return self.__event.is_set()
 
-    def wait(self) -> None:
-        self.__event.wait()
+    def wait(self, timeout=None) -> None:
+        self.__event.wait(timeout=timeout)
 
 
 class RequestResponse:
@@ -75,8 +75,8 @@ class RequestResponse:
         self.__r = r
         self.__event.set()
 
-    def wait(self) -> any:
-        self.__event.wait()
+    def wait(self, timeout=None) -> any:
+        self.__event.wait(timeout=timeout)
         return self.get_result()
 
 
@@ -396,12 +396,12 @@ class ShimmerBluetooth:
         print("Full reconnection successful.")
         return True
 
-    def _process_and_wait(self, cmd):
+    def _process_and_wait(self, cmd, timeout = None):
         compl_obj, return_obj = self._bluetooth.queue_command(cmd)
-        compl_obj.wait()
+        compl_obj.wait(timeout=timeout)
 
         if return_obj is not None:
-            return return_obj.wait()
+            return return_obj.wait(timeout=timeout)
         return None
 
     def add_stream_callback(self, cb: Callable[[DataPacket], None]) -> None:
@@ -509,10 +509,13 @@ class ShimmerBluetooth:
         :return: The firmware type as enum, i.e. SDLog or LogAndStream
             and the numeric firmware version
         """
-        fw_type, major, minor, rel = self._process_and_wait(GetFirmwareVersionCommand())
-        fw_version = FirmwareVersion(major, minor, rel)
+        try:
+            fw_type, major, minor, rel = self._process_and_wait(GetFirmwareVersionCommand(), timeout=10)
+            fw_version = FirmwareVersion(major, minor, rel)
 
-        return fw_type, fw_version
+            return fw_type, fw_version
+        except KeyError:
+            raise KeyError('Could not obtain firmware version. Exiting the program.')
 
     def get_exg_register(self, chip_id: int) -> ExGRegister:
         """Get the current configuration of one of the two ExG registers of the device
