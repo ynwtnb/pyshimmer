@@ -514,8 +514,8 @@ class ShimmerBluetooth:
             fw_version = FirmwareVersion(major, minor, rel)
 
             return fw_type, fw_version
-        except KeyError:
-            raise KeyError('Could not obtain firmware version. Exiting the program.')
+        except TypeError:
+            raise TypeError('Could not obtain firmware version. Exiting the program.')
 
     def get_exg_register(self, chip_id: int) -> ExGRegister:
         """Get the current configuration of one of the two ExG registers of the device
