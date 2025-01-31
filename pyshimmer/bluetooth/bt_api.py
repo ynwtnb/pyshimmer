@@ -51,8 +51,8 @@ class RequestCompletion:
     def has_completed(self) -> bool:
         return self.__event.is_set()
 
-    def wait(self, timeout=None) -> None:
-        self.__event.wait(timeout=timeout)
+    def wait(self) -> None:
+        self.__event.wait()
 
 
 class RequestResponse:
@@ -75,8 +75,8 @@ class RequestResponse:
         self.__r = r
         self.__event.set()
 
-    def wait(self, timeout=None) -> any:
-        self.__event.wait(timeout=timeout)
+    def wait(self) -> any:
+        self.__event.wait()
         return self.get_result()
 
 
@@ -337,6 +337,8 @@ class ShimmerBluetooth:
         self._reconnect_event.clear()
         self._thread = Thread(target=self._run_readloop, daemon=True)
         self._monitor_thread = Thread(target=self.monitor_and_reconnect, daemon=True)
+        self._thread.start()
+        self._monitor_thread.start()
 
         if self._fw_caps is None:
             self._set_fw_capabilities()
@@ -346,8 +348,6 @@ class ShimmerBluetooth:
 
         self._initialized = True
 
-        self._thread.start()
-        self._monitor_thread.start()
 
     def shutdown(self) -> None:
         """Shutdown the read loop
@@ -396,12 +396,12 @@ class ShimmerBluetooth:
         print("Full reconnection successful.")
         return True
 
-    def _process_and_wait(self, cmd, timeout = None):
+    def _process_and_wait(self, cmd):
         compl_obj, return_obj = self._bluetooth.queue_command(cmd)
-        compl_obj.wait(timeout=timeout)
+        compl_obj.wait()
 
         if return_obj is not None:
-            return return_obj.wait(timeout=timeout)
+            return return_obj.wait()
         return None
 
     def add_stream_callback(self, cb: Callable[[DataPacket], None]) -> None:
@@ -510,7 +510,7 @@ class ShimmerBluetooth:
             and the numeric firmware version
         """
         try:
-            fw_type, major, minor, rel = self._process_and_wait(GetFirmwareVersionCommand(), timeout=10)
+            fw_type, major, minor, rel = self._process_and_wait(GetFirmwareVersionCommand())
             fw_version = FirmwareVersion(major, minor, rel)
 
             return fw_type, fw_version
@@ -643,6 +643,4 @@ class ShimmerBluetooth:
             firmware incompatible to the Python API. If set to False, disable sending the status ack.
             In this state, the firmware is compatible to the Python API.
         """
-        res = self._process_and_wait(SetStatusAckCommand(enabled), timeout=10)
-        if res is None:
-            raise ValueError('Could not set status ack. Exiting the program.')
+        self._process_and_wait(SetStatusAckCommand(enabled))
