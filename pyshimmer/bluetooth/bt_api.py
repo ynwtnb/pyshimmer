@@ -643,4 +643,6 @@ class ShimmerBluetooth:
             firmware incompatible to the Python API. If set to False, disable sending the status ack.
             In this state, the firmware is compatible to the Python API.
         """
-        self._process_and_wait(SetStatusAckCommand(enabled))
+        res = self._process_and_wait(SetStatusAckCommand(enabled), timeout=10)
+        if res is None:
+            raise ValueError('Could not set status ack. Exiting the program.')
