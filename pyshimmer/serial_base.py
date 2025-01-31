@@ -206,3 +206,15 @@ class SerialBase:
 
         """
         self._serial.close()
+        
+    def open(self) -> None:
+        """Open the underlying serial stream
+
+        """
+        self._serial.open()
+    
+    def is_open(self) -> bool:
+        """Check if the underlying serial stream is open
+
+        """
+        return self._serial.is_open

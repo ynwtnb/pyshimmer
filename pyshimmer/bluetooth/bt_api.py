@@ -33,6 +33,8 @@ from pyshimmer.dev.fw_version import EFirmwareType, FirmwareVersion, FirmwareCap
 from pyshimmer.serial_base import ReadAbort
 from pyshimmer.util import fmt_hex, PeekQueue
 
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %(message)s')
 
 class RequestCompletion:
     """
@@ -276,13 +278,16 @@ class ShimmerBluetooth:
         self._serial = BluetoothSerial(serial)
         self._bluetooth = BluetoothRequestHandler(self._serial)
 
-        self._thread = Thread(target=self._run_readloop, daemon=True)
+        self._stop_event = Event()
+        self._reconnect_event = Event()
 
         self._initialized = False
         self._disable_ack = disable_status_ack
 
         self._fw_version: Optional[FirmwareVersion] = None
         self._fw_caps: Optional[FirmwareCapabilities] = None
+
+        self.cb = None
 
     @property
     def initialized(self) -> bool:
@@ -309,6 +314,7 @@ class ShimmerBluetooth:
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
+        
         self.shutdown()
 
     def _set_fw_capabilities(self) -> None:
@@ -321,20 +327,34 @@ class ShimmerBluetooth:
         This method must be invoked before sending commands to the Shimmer. It queries the Shimmer version,
         optionally disables the status acknowledgment and starts the read loop.
         """
-        self._thread.start()
+        print(f'Checking serial port...open status: {self._serial.is_open()}')
+        if not self._serial.is_open():
+            self._serial.open()
+            print(f'Opened serial port: {self._serial.is_open()}')
+        if self.cb is not None:
+            self.add_stream_callback(self.cb)
+        self._stop_event.clear()
+        self._reconnect_event.clear()
+        self._thread = Thread(target=self._run_readloop, daemon=True)
+        self._monitor_thread = Thread(target=self.monitor_and_reconnect, daemon=True)
 
-        self._set_fw_capabilities()
+        if self._fw_caps is None:
+            self._set_fw_capabilities()
 
         if self.capabilities.supports_ack_disable and self._disable_ack:
             self.set_status_ack(enabled=False)
 
         self._initialized = True
 
+        self._thread.start()
+        self._monitor_thread.start()
+
     def shutdown(self) -> None:
         """Shutdown the read loop
 
         Shutdown the read loop by stopping the read thread
         """
+        self._stop_event.set()
         self._serial.cancel_read()
         self._thread.join()
         self._serial.close()
@@ -342,14 +362,39 @@ class ShimmerBluetooth:
 
     def _run_readloop(self):
         try:
-            while True:
+            while not self._stop_event.is_set():
                 try:
                     self._bluetooth.process_single_input_event()
                 except Empty:
-                    pass
+                    logging.error('Empty error occured, attempting to reconnect')
+                    self._reconnect_event.set()
+                    break
 
         except ReadAbort:
             print('Read loop exciting after cancel request')
+    
+    def monitor_and_reconnect(self):
+        """Monitor the thread and handle reconnections if needed."""
+        while True:
+            self._reconnect_event.wait()  # 再接続要求を待機
+            print("Reconnection triggered...")
+            self._reconnect_event.clear()  # フラグをリセット
+
+            # 再接続処理を実行
+            if not self._try_full_reconnect():
+                print("Failed to reconnect. Exiting monitoring loop.")
+                break  # 再接続に失敗した場合は監視ループを終了
+
+            print("Reconnected successfully and restarted the read loop.")
+    
+    def _try_full_reconnect(self) -> bool:
+        """Attempt a full reconnection by reinitializing the connection."""
+        print("Shutting down for full reconnection...")
+        self.shutdown()  # 安全にシャットダウン
+        print("Shutdown complete. Reinitializing...")
+        self.initialize()  # 接続を再初期化
+        print("Full reconnection successful.")
+        return True
 
     def _process_and_wait(self, cmd):
         compl_obj, return_obj = self._bluetooth.queue_command(cmd)
@@ -364,6 +409,7 @@ class ShimmerBluetooth:
 
         :param cb: a function with a single argument
         """
+        self.cb = cb
         self._bluetooth.add_stream_callback(cb)
 
     def remove_stream_callback(self, cb: Callable[[DataPacket], None]) -> None:
