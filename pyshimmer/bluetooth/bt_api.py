@@ -376,23 +376,23 @@ class ShimmerBluetooth:
     def monitor_and_reconnect(self):
         """Monitor the thread and handle reconnections if needed."""
         while True:
-            self._reconnect_event.wait()  # 再接続要求を待機
+            self._reconnect_event.wait()  # Wait for reconnection request
             print("Reconnection triggered...")
-            self._reconnect_event.clear()  # フラグをリセット
+            self._reconnect_event.clear()  # Reset the reconnection flag
 
-            # 再接続処理を実行
+            # Attempt to reconnect
             if not self._try_full_reconnect():
                 print("Failed to reconnect. Exiting monitoring loop.")
-                break  # 再接続に失敗した場合は監視ループを終了
+                break  # End the loop when reconnection fails
 
             print("Reconnected successfully and restarted the read loop.")
     
     def _try_full_reconnect(self) -> bool:
         """Attempt a full reconnection by reinitializing the connection."""
         print("Shutting down for full reconnection...")
-        self.shutdown()  # 安全にシャットダウン
+        self.shutdown()  # Shutdown the current connection
         print("Shutdown complete. Reinitializing...")
-        self.initialize()  # 接続を再初期化
+        self.initialize()  # Initialize a new connection
         print("Full reconnection successful.")
         return True
 
