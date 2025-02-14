@@ -356,7 +356,10 @@ class ShimmerBluetooth:
         """
         self._stop_event.set()
         self._serial.cancel_read()
-        self._thread.join()
+        if self._thread.is_alive():
+            self._thread.join()
+        if self._monitor_thread.is_alive():
+            self._monitor_thread.join()
         self._serial.close()
         self._bluetooth.clear_queues()
 
@@ -370,27 +373,33 @@ class ShimmerBluetooth:
                     self._reconnect_event.set()
                     break
                 except KeyboardInterrupt:
-                    self.shutdown()
-                    break
+                    return
 
         except ReadAbort:
-            self.shutdown()
             print('Read loop exciting after cancel request')
+            return 
     
     def monitor_and_reconnect(self):
         """Monitor the thread and handle reconnections if needed."""
         while True:
-            self._reconnect_event.wait()  # Wait for reconnection request
-            print("Reconnection triggered...")
-            self._reconnect_event.clear()  # Reset the reconnection flag
+            event_triggered = self._reconnect_event.wait(timeout=5)  # Wait for reconnection request
+            
+            if event_triggered:
+                print("Reconnection triggered...")
+                self._reconnect_event.clear()  # Reset the reconnection flag
 
-            # Attempt to reconnect
-            if not self._try_full_reconnect():
-                print("Failed to reconnect. Exiting monitoring loop.")
-                break  # End the loop when reconnection fails
+                # Attempt to reconnect
+                if not self._try_full_reconnect():
+                    print("Failed to reconnect. Exiting monitoring loop.")
+                    break  # End the loop when reconnection fails
 
-            print("Reconnected successfully and restarted the read loop.")
-    
+                print("Reconnected successfully and restarted the read loop.")
+            
+            elif not self._thread.is_alive():
+                print('Read loop is not alive. Shutting down...')
+                return 
+        return
+            
     def _try_full_reconnect(self) -> bool:
         """Attempt a full reconnection by reinitializing the connection."""
         print("Shutting down for full reconnection...")
