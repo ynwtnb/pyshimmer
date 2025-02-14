@@ -374,6 +374,7 @@ class ShimmerBluetooth:
                     break
 
         except ReadAbort:
+            self.shutdown()
             print('Read loop exciting after cancel request')
     
     def monitor_and_reconnect(self):
