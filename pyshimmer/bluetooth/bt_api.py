@@ -36,6 +36,8 @@ from pyshimmer.util import fmt_hex, PeekQueue
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %(message)s')
 
+import time
+
 class RequestCompletion:
     """
     Returned by the Bluetooth API upon sending a request. Signals the completion of a request when the API receives
@@ -259,7 +261,7 @@ class BluetoothRequestHandler:
 
 class ShimmerBluetooth:
 
-    def __init__(self, serial: Serial, disable_status_ack: bool = True):
+    def __init__(self, portname: str, baudrate: int, disable_status_ack: bool = True):
         """API for communicating with the Shimmer via Bluetooth
 
         This class implements support for talking to the Shimmer LogAndStream firmware via Bluetooth.
@@ -275,6 +277,9 @@ class ShimmerBluetooth:
             acknowledgment byte at startup. You can set it to True if you don't want this or if it causes
             trouble with your firmware version.
         """
+        self._portname = portname
+        self._baudrate = baudrate
+        serial = Serial(portname, baudrate)
         self._serial = BluetoothSerial(serial)
         self._bluetooth = BluetoothRequestHandler(self._serial)
 
@@ -347,6 +352,42 @@ class ShimmerBluetooth:
             self.set_status_ack(enabled=False)
 
         self._initialized = True
+    
+    def reinitialize(self) -> None:
+        """Reinitialize the Bluetooth connection after a disconnect
+
+        This method must be invoked before sending commands to the Shimmer. It queries the Shimmer version,
+        optionally disables the status acknowledgment and starts the read loop.
+        """
+        serial = Serial(self._portname, self._baudrate)
+        self._serial = BluetoothSerial(serial)
+        self._bluetooth = BluetoothRequestHandler(self._serial)
+
+        self._stop_event = Event()
+        self._reconnect_event = Event()
+
+        self._initialized = False
+
+        print(f'      Checking serial port...open status: {self._serial.is_open()}')
+        if not self._serial.is_open():
+            self._serial.open()
+            print(f'      Opened serial port: {self._serial.is_open()}')
+        if self.cb is not None:
+            self.add_stream_callback(self.cb)
+        self._stop_event.clear()
+        self._reconnect_event.clear()
+        self._thread = Thread(target=self._run_readloop, daemon=True)
+        self._monitor_thread = Thread(target=self.monitor_and_reconnect, daemon=True)
+        self._thread.start()
+        self._monitor_thread.start()
+
+        if self._fw_caps is None:
+            self._set_fw_capabilities()
+
+        if self.capabilities.supports_ack_disable and self._disable_ack:
+            self.set_status_ack(enabled=False)
+
+        self._initialized = True
 
 
     def shutdown(self) -> None:
@@ -355,12 +396,14 @@ class ShimmerBluetooth:
         Shutdown the read loop by stopping the read thread
         """
         self._stop_event.set()
-        self._serial.cancel_read()
+        try:
+            self._serial.cancel_read()
+        except TypeError:
+            pass
         if self._thread.is_alive():
             self._thread.join()
-        if self._monitor_thread.is_alive():
-            self._monitor_thread.join()
         self._serial.close()
+        assert(not self._serial.is_open())
         self._bluetooth.clear_queues()
 
     def _run_readloop(self):
@@ -393,8 +436,8 @@ class ShimmerBluetooth:
                     print("Failed to reconnect. Exiting monitoring loop.")
                     break  # End the loop when reconnection fails
 
-                print("Reconnected successfully and restarted the read loop.")
-            
+                print("   Reconnected successfully and restarted the read loop.")
+                return
             elif not self._thread.is_alive():
                 print('Read loop is not alive. Shutting down...')
                 return 
@@ -402,11 +445,14 @@ class ShimmerBluetooth:
             
     def _try_full_reconnect(self) -> bool:
         """Attempt a full reconnection by reinitializing the connection."""
-        print("Shutting down for full reconnection...")
+        print("   Shutting down for full reconnection...")
         self.shutdown()  # Shutdown the current connection
-        print("Shutdown complete. Reinitializing...")
-        self.initialize()  # Initialize a new connection
-        print("Full reconnection successful.")
+        print("   Shutdown complete. Reinitializing...")
+        # Wait until the PC recognize the port again
+        time.sleep(10)
+        self.reinitialize()  # Reinitialize a new connection
+        self.start_streaming()  # Restart the streaming
+        print("   Full reconnection successful. Restarted streaming.")
         return True
 
     def _process_and_wait(self, cmd):
