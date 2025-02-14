@@ -369,6 +369,9 @@ class ShimmerBluetooth:
                     logging.error('Empty error occured, attempting to reconnect')
                     self._reconnect_event.set()
                     break
+                except KeyboardInterrupt:
+                    self.shutdown()
+                    break
 
         except ReadAbort:
             print('Read loop exciting after cancel request')
