@@ -18,6 +18,7 @@ from threading import Event, Thread
 from typing import List, Tuple, Callable, Iterable, Optional
 
 from serial import Serial
+from serial.serialutil import SerialException
 
 from pyshimmer.bluetooth.bt_commands import ShimmerCommand, GetSamplingRateCommand, GetConfigTimeCommand, \
     SetConfigTimeCommand, GetRealTimeClockCommand, SetRealTimeClockCommand, GetStatusCommand, \
@@ -359,7 +360,13 @@ class ShimmerBluetooth:
         This method must be invoked before sending commands to the Shimmer. It queries the Shimmer version,
         optionally disables the status acknowledgment and starts the read loop.
         """
-        serial = Serial(self._portname, self._baudrate)
+        while True:
+            try:
+                serial = Serial(self._portname, self._baudrate)
+                break
+            except SerialException:
+                print('      Failed to open serial port. Retrying...')
+                time.sleep(2)
         self._serial = BluetoothSerial(serial)
         self._bluetooth = BluetoothRequestHandler(self._serial)
 
