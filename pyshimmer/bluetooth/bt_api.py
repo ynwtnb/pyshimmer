@@ -35,9 +35,8 @@ from pyshimmer.serial_base import ReadAbort
 from pyshimmer.util import fmt_hex, PeekQueue
 
 import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %(message)s')
-
 import time
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %(message)s')
 
 class RequestCompletion:
     """
@@ -85,10 +84,8 @@ class RequestResponse:
 
 class BluetoothRequestHandler:
     """Base class for the Bluetooth API which handles serial data processing synchronously
-
     In contrast to the :class:`ShimmerBluetooth` class which uses Threading, this class acts as a base layer that
     operates synchronously and allows for easier testing.
-
     :arg serial: The serial interface to use
     """
 
@@ -104,28 +101,24 @@ class BluetoothRequestHandler:
 
     def set_stream_types(self, types: List[Tuple[EChannelType, ChannelDataType]]) -> None:
         """Set the channel types that are streamed as part of the data packets
-
         :param types: A List of tuples, each containing a channel type and its corresponding data type
         """
         self._stream_types = types
 
     def add_stream_callback(self, cb: Callable[[DataPacket], None]) -> None:
         """Add a stream callback which is called when a new data packet arrives
-
         :param cb: a function with a single argument
         """
         self._stream_cbs += [cb]
 
     def remove_stream_callback(self, cb: Callable[[DataPacket], None]) -> None:
         """Remove the callback from the list of active callbacks
-
         :param cb: The callback function to remove
         """
         self._stream_cbs.remove(cb)
 
     def add_status_callback(self, cb: Callable[[List[bool]], None]) -> None:
         """Add a status callback which is called when a new status update from the Shimmer arrives
-
         :param cb: a function with a single argument. The argument is the same value is the return value of the
             :meth:`pyshimmer.bluetooth.bt_api.ShimmerBluetooth.get_status` method.
         """
@@ -133,7 +126,6 @@ class BluetoothRequestHandler:
 
     def remove_status_callback(self, cb: Callable[[List[bool]], None]) -> None:
         """Remove the callback from the list of active callbacks
-
         :param cb: The callback function to remove
         """
         self._status_cbs.remove(cb)
@@ -201,10 +193,8 @@ class BluetoothRequestHandler:
 
     def process_single_input_event(self) -> None:
         """Process and read a single input event
-
         An input event can be a single acknowledgment or a request response. The function does not return anything.
         All data is provided via the completion objects returned when queueing the command.
-
         """
         peek = self._serial.peek_packed('B')
 
@@ -219,7 +209,6 @@ class BluetoothRequestHandler:
 
     def queue_command(self, cmd: ShimmerCommand) -> Tuple[RequestCompletion, RequestResponse]:
         """Queue a command request for processing
-
         :param cmd: The command to send to the Shimmer device
         :return: A completion instance and a response instance. The completion instance is always returned and becomes
             true when the command has been processed by the Shimmer. The response object is only returned if the command
@@ -240,7 +229,6 @@ class BluetoothRequestHandler:
 
     def clear_queues(self) -> None:
         """Clear the internal queues and release any locks held by other threads
-
         """
         try:
             while True:
@@ -264,12 +252,10 @@ class ShimmerBluetooth:
 
     def __init__(self, portname: str, baudrate: int, disable_status_ack: bool = True):
         """API for communicating with the Shimmer via Bluetooth
-
         This class implements support for talking to the Shimmer LogAndStream firmware via Bluetooth.
         Each command is encapsulated as a method that can be called to invoke the corresponding command.
         All commands are executed synchronously. This means that the method call will block until the
         Shimmer has processed the request and responded.
-
         :param serial: The serial channel that encapsulates the rfcomm Bluetooth connection to the Shimmer
         :param disable_status_ack: Starting with LogAndStream firmware version 0.15.4, the vanilla firmware
             supports disabling the acknowledgment byte before status messages. This removes the need for
@@ -278,9 +264,9 @@ class ShimmerBluetooth:
             acknowledgment byte at startup. You can set it to True if you don't want this or if it causes
             trouble with your firmware version.
         """
-        self._portname = portname
+        self._serial_port = portname
         self._baudrate = baudrate
-        serial = Serial(portname, baudrate)
+        serial = Serial(self._serial_port, self._baudrate)
         self._serial = BluetoothSerial(serial)
         self._bluetooth = BluetoothRequestHandler(self._serial)
 
@@ -298,9 +284,7 @@ class ShimmerBluetooth:
     @property
     def initialized(self) -> bool:
         """Specifies if the connection was initialized
-
         This property helps to determine if the capabilities property will return a valid value.
-
         :return: True if initialize() was called, otherwise False
         """
         return self._initialized
@@ -308,9 +292,7 @@ class ShimmerBluetooth:
     @property
     def capabilities(self) -> FirmwareCapabilities:
         """Return the capabilities of the device firmware
-
         This property shall only be accessed after invoking initialize().
-
         :return: A FirmwareCapabilities instance representing the version and capabilities of the firmware
         """
         return self._fw_caps
@@ -329,7 +311,6 @@ class ShimmerBluetooth:
 
     def initialize(self) -> None:
         """Initialize the Bluetooth connection
-
         This method must be invoked before sending commands to the Shimmer. It queries the Shimmer version,
         optionally disables the status acknowledgment and starts the read loop.
         """
@@ -355,18 +336,11 @@ class ShimmerBluetooth:
         self._initialized = True
     
     def reinitialize(self) -> None:
-        """Reinitialize the Bluetooth connection after a disconnect
-
+        """Initialize the Bluetooth connection
         This method must be invoked before sending commands to the Shimmer. It queries the Shimmer version,
         optionally disables the status acknowledgment and starts the read loop.
         """
-        while True:
-            try:
-                serial = Serial(self._portname, self._baudrate)
-                break
-            except SerialException:
-                print('      Failed to open serial port. Retrying...')
-                time.sleep(2)
+        serial = Serial(self._serial_port, self._baudrate)
         self._serial = BluetoothSerial(serial)
         self._bluetooth = BluetoothRequestHandler(self._serial)
 
@@ -375,10 +349,11 @@ class ShimmerBluetooth:
 
         self._initialized = False
 
-        print(f'      Checking serial port...open status: {self._serial.is_open()}')
+        print(f'......Checking serial port...open status: {self._serial.is_open()}')
+
         if not self._serial.is_open():
             self._serial.open()
-            print(f'      Opened serial port: {self._serial.is_open()}')
+            print(f'......Opened serial port: {self._serial.is_open()}')
         if self.cb is not None:
             self.add_stream_callback(self.cb)
         self._stop_event.clear()
@@ -395,11 +370,11 @@ class ShimmerBluetooth:
             self.set_status_ack(enabled=False)
 
         self._initialized = True
+        self.start_streaming()
 
 
     def shutdown(self) -> None:
         """Shutdown the read loop
-
         Shutdown the read loop by stopping the read thread
         """
         self._stop_event.set()
@@ -427,7 +402,7 @@ class ShimmerBluetooth:
 
         except ReadAbort:
             print('Read loop exciting after cancel request')
-            return 
+            return
     
     def monitor_and_reconnect(self):
         """Monitor the thread and handle reconnections if needed."""
@@ -443,23 +418,22 @@ class ShimmerBluetooth:
                     print("Failed to reconnect. Exiting monitoring loop.")
                     break  # End the loop when reconnection fails
 
-                print("   Reconnected successfully and restarted the read loop.")
+                print("...Reconnected successfully and restarted the read loop.")
                 return
+            
             elif not self._thread.is_alive():
                 print('Read loop is not alive. Shutting down...')
                 return 
-        return
-            
+        return 
+    
     def _try_full_reconnect(self) -> bool:
         """Attempt a full reconnection by reinitializing the connection."""
-        print("   Shutting down for full reconnection...")
+        print("...Shutting down for full reconnection...")
         self.shutdown()  # Shutdown the current connection
-        print("   Shutdown complete. Reinitializing...")
-        # Wait until the PC recognize the port again
-        time.sleep(10)
-        self.reinitialize()  # Reinitialize a new connection
-        self.start_streaming()  # Restart the streaming
-        print("   Full reconnection successful. Restarted streaming.")
+        print("...Shutdown complete. Reinitializing...")
+        time.sleep(15)
+        self.reinitialize()  # Initialize a new connection
+        print("...Full reconnection successful.")
         return True
 
     def _process_and_wait(self, cmd):
@@ -472,7 +446,6 @@ class ShimmerBluetooth:
 
     def add_stream_callback(self, cb: Callable[[DataPacket], None]) -> None:
         """Add a stream callback which is called when a new data packet arrives
-
         :param cb: a function with a single argument
         """
         self.cb = cb
@@ -480,14 +453,12 @@ class ShimmerBluetooth:
 
     def remove_stream_callback(self, cb: Callable[[DataPacket], None]) -> None:
         """Remove the callback from the list of active callbacks
-
         :param cb: The callback function to remove
         """
         self._bluetooth.remove_stream_callback(cb)
 
     def add_status_callback(self, cb: Callable[[List[bool]], None]) -> None:
         """Add a status callback which is called when a new status update from the Shimmer arrives
-
         :param cb: a function with a single argument. The argument is the same value is the return value of the
             :meth:`pyshimmer.bluetooth.bt_api.ShimmerBluetooth.get_status` method.
         """
@@ -495,28 +466,24 @@ class ShimmerBluetooth:
 
     def remove_status_callback(self, cb: Callable[[List[bool]], None]) -> None:
         """Remove the callback from the list of active callbacks
-
         :param cb: The callback function to remove
         """
         self._bluetooth.remove_status_callback(cb)
 
     def get_sampling_rate(self) -> float:
         """Retrieve the sampling rate of the device
-
         :return: The sampling rate as floating point value in samples per second
         """
         return self._process_and_wait(GetSamplingRateCommand())
 
     def set_sampling_rate(self, sr: float) -> None:
         """Set the active sampling rate for the device
-
         :param sr: The sampling rate in Hertz
         """
         self._process_and_wait(SetSamplingRateCommand(sr))
 
     def get_battery_state(self, in_percent: bool) -> float:
         """Retrieve the battery state of the device
-
         :param in_percent: True: calculate battery state in percent; False: calculate battery state in Volt
         :return: The battery state in percent / Volt
         """
@@ -524,46 +491,38 @@ class ShimmerBluetooth:
 
     def get_config_time(self) -> int:
         """Get the config time from the device as configured in the configuration file
-
         :return: The config time as integer
         """
         return self._process_and_wait(GetConfigTimeCommand())
 
     def set_config_time(self, time: int) -> None:
         """Set the config time of the device
-
         :arg time: The configuration time that will be set in the configuration of the Shimmer
         """
         self._process_and_wait(SetConfigTimeCommand(time))
 
     def set_sensors(self, sensors: Iterable[ESensorGroup]) -> None:
         """Set the active sensors for sampling
-
         This command will activate the specified list of sensors and deactivate all other sensors.
-
         :param sensors: A list of sensors to activate
         """
         self._process_and_wait(SetSensorsCommand(sensors))
 
     def get_rtc(self) -> float:
         """Retrieve the current value of the onboard real-time clock
-
         :return: The current time of the device in seconds as UNIX timestamp
         """
         return self._process_and_wait(GetRealTimeClockCommand())
 
     def set_rtc(self, time_sec: float) -> None:
         """Set the value of the onboard real-time clock
-
         Should be set as a UTC UNIX timestamp such that the resulting recordings have universal timestamps
-
         :param time_sec: The UNIX timestamp in seconds
         """
         self._process_and_wait(SetRealTimeClockCommand(time_sec))
 
     def get_status(self) -> List[bool]:
         """Get the status of the device
-
         :return: A list of 8 bools which signal:
             dev_docked, dev_sensing, rtc_set, dev_logging, dev_streaming, sd_card_present, sd_error, status_red_led
         """
@@ -571,7 +530,6 @@ class ShimmerBluetooth:
 
     def get_firmware_version(self) -> Tuple[EFirmwareType, FirmwareVersion]:
         """Get the version of the running firmware
-
         :return: The firmware type as enum, i.e. SDLog or LogAndStream
             and the numeric firmware version
         """
@@ -585,9 +543,7 @@ class ShimmerBluetooth:
 
     def get_exg_register(self, chip_id: int) -> ExGRegister:
         """Get the current configuration of one of the two ExG registers of the device
-
         Note that this command only returns meaningful results if the device features ECG chips
-
         :param chip_id: The ID of the chip, one of [0, 1]
         :return: An ExGRegister object that presents the register contents in an easily processable manner
         """
@@ -601,7 +557,6 @@ class ShimmerBluetooth:
 
     def set_exg_register(self, chip_id: int, offset: int, data: bytes) -> None:
         """Configure part of the memory of the ExG registers
-
         :param chip_id: The ID of the chip, one of [0, 1]
         :param offset: The offset at which to write the data bytes
         :param data: The data bytes to write
@@ -610,35 +565,30 @@ class ShimmerBluetooth:
 
     def get_device_name(self) -> str:
         """Retrieve the device name
-
         :return: The device name as string
         """
         return self._process_and_wait(GetDeviceNameCommand())
 
     def set_device_name(self, dev_name: str) -> None:
         """Set the device name
-
         :param dev_name: The device name to set
         """
         self._process_and_wait(SetDeviceNameCommand(dev_name))
 
     def get_experiment_id(self) -> str:
         """Retrieve the experiment id as string
-
         :return: The experiment ID as string
         """
         return self._process_and_wait(GetExperimentIDCommand())
 
     def set_experiment_id(self, exp_id: str) -> None:
         """Set the experiment ID for the device
-
         :param exp_id: The id to set for the device
         """
         self._process_and_wait(SetExperimentIDCommand(exp_id))
 
     def get_inquiry(self) -> Tuple[float, int, List[EChannelType]]:
         """Perform inquiry command
-
         :return: A tuple of 3 values:
             - The sampling rate as float
             - The buf size of the device
@@ -648,9 +598,7 @@ class ShimmerBluetooth:
 
     def get_data_types(self):
         """Get the active data channels of the device
-
         These data channels will be contained in a DataPacket when streaming
-
         :return: A list of data channels, always containing the TIMESTAMP channel
         """
         _, _, ctypes = self.get_inquiry()
@@ -661,7 +609,6 @@ class ShimmerBluetooth:
 
     def start_streaming(self) -> None:
         """Start streaming data
-
         """
         ctypes = self.get_data_types()
 
@@ -672,39 +619,32 @@ class ShimmerBluetooth:
 
     def stop_streaming(self) -> None:
         """Stop streaming data
-
         Note that the interface will possibly return more data packets that have already been received and are in the
         input buffer.
-
         """
         self._process_and_wait(StopStreamingCommand())
 
     def start_logging(self) -> None:
         """Start logging data to the SD card of the device
-
         """
         self._process_and_wait(StartLoggingCommand())
 
     def stop_logging(self) -> None:
         """Stop logging data to the SD card of the device
-
         """
         self._process_and_wait(StopLoggingCommand())
 
     def send_ping(self) -> None:
         """Send a ping command to the device
-
         The command can be used to test the connection. It does not return anything.
         """
         self._process_and_wait(DummyCommand())
 
     def set_status_ack(self, enabled: bool) -> None:
         """Send a command to enable or disable the status acknowledgment
-
         This command should normally not be called directly. If enabled in the constructor, the command
         will automatically be sent to the Shimmer if the firmware supports it. It can be used to make
         vanilla firmware versions compatible with the state machine of the Python API.
-
         :param enabled: If set to True, enable status acknowledgment byte. This will make the
             firmware incompatible to the Python API. If set to False, disable sending the status ack.
             In this state, the firmware is compatible to the Python API.
